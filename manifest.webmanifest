@@ -1,5 +1,6 @@
 {
-  "name": "Dehnuebungen Timer",
+   "_comment": " File Name: manifest.webmanifest ",
+"name": "Dehnuebungen Timer",
   "short_name": "Dehnuebungen",
   "description": "Ein einfacher, offline-faehiger Dehnuebungen-Timer als PWA.",
   "start_url": "./index.html",
