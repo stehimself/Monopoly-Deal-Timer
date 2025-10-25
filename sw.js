@@ -1,86 +1,80 @@
-// /sw.js
-// Einfacher App-Shell Service Worker mit zwei Caches:
-// - STATIC (Cache First) fuer CSS/JS/Icons/Manifest
-// - HTML (Network First + Offline-Fallback) fuer Seiteninhalte
+// /app.js
+// Einfacher Countdown: Eingabe in Sekunden, grosser Start-Button setzt & startet neu.
 
-const STATIC_CACHE = 'static-v1';
-const HTML_CACHE   = 'html-v1';
-const OFFLINE_URL  = './offline.html';
+(() => {
+  const input = document.getElementById('secondsInput');   // Sekunden-Eingabe
+  const display = document.getElementById('timer');         // mm:ss Anzeige
+  const statusEl = document.getElementById('status');       // Statuszeile
+  const startBtn = document.getElementById('startBtn');     // grosser Start-Button
 
-// Dateiliste fuer den Install-Cache (App-Shell)
-const STATIC_ASSETS = [
-  './',
-  './index.html',
-  './app.js',
-  './manifest.webmanifest',
-  './offline.html',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './icons/icon-512-maskable.png'
-];
+  let tick = null;      // setInterval Handle
+  let endAt = 0;        // Zeitpunkt (ms) wann der Timer endet
 
-// Install: App-Shell vorcachen
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(STATIC_CACHE).then(cache => cache.addAll(STATIC_ASSETS))
-  );
-  self.skipWaiting();
-});
+  // Letzte Auswahl laden
+  const saved = Number(localStorage.getItem('md.seconds')) || Number(input.value) || 30;
+  input.value = Math.max(1, Math.min(3600, saved));
+  renderStatic(Number(input.value));
 
-// Activate: alte Caches aufraeumen
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.map(k => {
-        if (![STATIC_CACHE, HTML_CACHE].includes(k)) return caches.delete(k);
-      }))
-    )
-  );
-  self.clients.claim();
-});
-
-// Fetch-Strategien:
-// - HTML: Network First, bei Fehler Offline-Seite
-// - Sonst: Cache First, dann Netz
-self.addEventListener('fetch', (event) => {
-  const req = event.request;
-
-  // HTML-Seiten erkennen
-  const isHTML = req.mode === 'navigate' ||
-                 (req.headers.get('accept') || '').includes('text/html');
-
-  if (isHTML) {
-    event.respondWith(networkFirst(req));
-  } else {
-    event.respondWith(cacheFirst(req));
+  // Utility: mm:ss formatieren
+  function fmt(msLeft){
+    const total = Math.max(0, Math.ceil(msLeft/1000));
+    const m = Math.floor(total/60);
+    const s = total % 60;
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
   }
-});
 
-// Network First fuer HTML
-async function networkFirst(request){
-  const cache = await caches.open(HTML_CACHE);
-  try {
-    const fresh = await fetch(request);
-    cache.put(request, fresh.clone());
-    return fresh;
-  } catch (err) {
-    const cached = await cache.match(request);
-    return cached || caches.match(OFFLINE_URL);
+  // Anzeige ohne Lauf aktualisieren (z. B. beim Ändern der Eingabe)
+  function renderStatic(sec){
+    display.textContent = fmt(sec*1000);
+    statusEl.textContent = 'Bereit';
   }
-}
 
-// Cache First fuer statische Assets
-async function cacheFirst(request){
-  const cached = await caches.match(request);
-  if (cached) return cached;
-  try {
-    const fresh = await fetch(request);
-    const cacheName = STATIC_CACHE;
-    const cache = await caches.open(cacheName);
-    cache.put(request, fresh.clone());
-    return fresh;
-  } catch (err) {
-    // Im Fehlerfall nichts weiter moeglich
-    return new Response('', {status: 408, statusText: 'Offline'});
+  // Haupt-Update-Schleife (100 ms), Zeitdrift-fest über endAt
+  function loop(){
+    const left = endAt - Date.now();
+    display.textContent = fmt(left);
+    if (left <= 0){
+      stopLoop();
+      display.textContent = fmt(0);
+      statusEl.textContent = 'Fertig!';
+      // Haptik als Feedback (wo unterstützt)
+      try { navigator.vibrate && navigator.vibrate([200,100,200]); } catch(e){}
+    }
   }
-}
+
+  function stopLoop(){
+    if (tick){ clearInterval(tick); tick = null; }
+  }
+
+  // Start = immer neu setzen & direkt loslaufen
+  function start(){
+    const sec = Math.max(1, Math.min(3600, Number(input.value) || 0));
+    input.value = sec;                             // Eingabe normalisieren
+    localStorage.setItem('md.seconds', String(sec));
+    endAt = Date.now() + sec*1000;
+    statusEl.textContent = 'Läuft…';
+    loop();
+    stopLoop();
+    tick = setInterval(loop, 100);                 // 10 Hz für flüssige Anzeige
+  }
+
+  // Enter in der Eingabe startet sofort
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') start();
+  });
+
+  // Beim Ändern der Sekunden nur Anzeige aktualisieren
+  input.addEventListener('change', () => {
+    const sec = Math.max(1, Math.min(3600, Number(input.value) || 0));
+    renderStatic(sec);
+    localStorage.setItem('md.seconds', String(sec));
+  });
+
+  // Grosser roter Button
+  startBtn.addEventListener('click', start);
+
+  // (Optional) Service Worker registrieren, falls vorhanden
+  if ('serviceWorker' in navigator){
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+})();
