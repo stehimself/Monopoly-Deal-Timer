@@ -1,28 +1,159 @@
-<!doctype html>
+<!-- /index.html -->
+<!DOCTYPE html>
 <html lang="de">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Monopoly Deal Timer</title>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Monopoly Deal Timer</title>
 
-    <!-- Manifest einbinden (relativer Pfad im Repo-Unterordner) -->
-    <link rel="manifest" href="./manifest.webmanifest" />
-    <meta name="theme-color" content="#d32f2f" />
-  </head>
-  <body>
-    <h1>Monopoly Deal Timer</h1>
+  <!-- (Optional) PWA Manifest -->
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <meta name="theme-color" content="#D10000" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="MD Timer" />
 
-    <!-- ... dein Timer-UI ... -->
+  <style>
+    :root{
+      --bg:#F5F3F1; --fg:#1F1D1B; --muted:#635F5B;
+      --card:#fff; --danger:#D10000; --dangerText:#fff; --inputBorder:#CFCDEB;
+    }
+    html,body{height:100%}
+    body{
+      margin:0; padding:16px; background:var(--bg); color:var(--fg);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, Helvetica, sans-serif;
+      display:flex; flex-direction:column; align-items:center; gap:18px; max-width:560px; margin-inline:auto;
+    }
+    h1{font-size:40px; line-height:1.1; margin:12px 0 0; font-weight:800; text-align:center}
+    .sub{color:var(--muted); font-size:14px; text-align:center}
 
-    <script>
-      // Service Worker für die PWA registrieren (Scope auf das Verzeichnis begrenzen)
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker
-            .register('./sw.js', { scope: './' }) // wichtig bei GitHub Pages Unterordnern
-            .catch(err => console.error('SW registration failed:', err));
-        });
+    .card{
+      width:100%; background:var(--card); border-radius:16px; padding:16px;
+      box-shadow:0 8px 30px rgba(0,0,0,.08);
+    }
+    .row{display:flex; align-items:center; gap:12px; justify-content:center; flex-wrap:wrap}
+
+    label{font-weight:700}
+    input[type="number"]{
+      appearance:textfield; -moz-appearance:textfield;
+      width:140px; padding:14px 16px; font-size:22px; font-weight:800; text-align:center;
+      border-radius:12px; border:2px solid var(--inputBorder); background:#fff; color:var(--fg);
+    }
+    input::-webkit-outer-spin-button, input::-webkit-inner-spin-button{ -webkit-appearance: none; margin: 0; }
+
+    .timer{
+      display:flex; flex-direction:column; align-items:center; gap:6px; padding:20px;
+    }
+    .big{font-size:96px; font-variant-numeric: tabular-nums; letter-spacing:1px}
+    .status{font-size:13px; color:var(--muted); min-height:18px}
+
+    /* Grosser runder Start-Button */
+    #startBtn{
+      -webkit-tap-highlight-color: transparent;
+      width:220px; height:220px; border-radius:50%;
+      display:grid; place-items:center;
+      border:0; background:var(--danger); color:var(--dangerText);
+      font-size:28px; font-weight:900; letter-spacing:.3px;
+      box-shadow:0 12px 30px rgba(209,0,0,.35);
+      cursor:pointer; user-select:none;
+    }
+    #startBtn:active{ transform:translateY(1px); }
+  </style>
+</head>
+<body>
+  <h1>Monopoly Deal Timer</h1>
+  <div class="sub">Sekunden einstellen, dann auf Start tippen. Start setzt den Timer immer neu.</div>
+
+  <!-- Sekunden-Einstellung -->
+  <div class="card">
+    <div class="row">
+      <label for="secondsInput">Sekunden:</label>
+      <input id="secondsInput" type="number" inputmode="numeric" min="1" max="3600" step="1" value="30" />
+    </div>
+  </div>
+
+  <!-- Anzeige -->
+  <div class="card timer">
+    <div id="timer" class="big">00:30</div>
+    <div id="status" class="status">Bereit</div>
+  </div>
+
+  <!-- Grosser runder Start-Button -->
+  <button id="startBtn" aria-label="Timer starten">Start</button>
+
+  <script>
+    (function () {
+      const input   = document.getElementById('secondsInput');
+      const display = document.getElementById('timer');
+      const status  = document.getElementById('status');
+      const start   = document.getElementById('startBtn');
+
+      let intervalId = null;
+      let endAtMs = 0;
+
+      // mm:ss Formatierung
+      function fmtSeconds(totalSec){
+        const s = Math.max(0, Math.ceil(totalSec));
+        const m = Math.floor(s / 60);
+        const r = s % 60;
+        return `${String(m).padStart(2,'0')}:${String(r).padStart(2,'0')}`;
       }
-    </script>
-  </body>
+
+      function clampSec(v){
+        const n = Number(v);
+        if (!Number.isFinite(n)) return 30;
+        return Math.max(1, Math.min(3600, Math.floor(n)));
+      }
+
+      function renderStatic(){
+        const sec = clampSec(input.value);
+        display.textContent = fmtSeconds(sec);
+        status.textContent = 'Bereit';
+      }
+
+      function stopLoop(){
+        if (intervalId){ clearInterval(intervalId); intervalId = null; }
+      }
+
+      function tick(){
+        const leftMs = endAtMs - Date.now();
+        const leftSec = leftMs / 1000;
+        display.textContent = fmtSeconds(leftSec);
+        if (leftMs <= 0){
+          stopLoop();
+          display.textContent = fmtSeconds(0);
+          status.textContent = 'Fertig!';
+          // Optionales haptisches Feedback
+          if (navigator.vibrate) { try { navigator.vibrate([200,100,200]); } catch(e){} }
+        }
+      }
+
+      function startTimer(){
+        // WICHTIG: immer aktuellen Eingabewert nehmen (keine Defaults/Storage)
+        const sec = clampSec(input.value);
+        input.value = sec;             // Eingabe normalisieren
+        endAtMs = Date.now() + sec * 1000;
+        status.textContent = 'Läuft…';
+        tick();
+        stopLoop();
+        intervalId = setInterval(tick, 100);
+      }
+
+      // Events
+      input.addEventListener('input', renderStatic);
+      input.addEventListener('change', renderStatic);
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') startTimer(); });
+      start.addEventListener('click', startTimer);
+
+      // Initiale Anzeige gemäss Eingabe
+      renderStatic();
+
+      // (Optional) Service Worker, falls vorhanden
+      if ('serviceWorker' in navigator){
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      }
+    })();
+  </script>
+</body>
 </html>
