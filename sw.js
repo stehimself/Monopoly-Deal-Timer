@@ -1,77 +1,81 @@
-// sw.js
-// Schlanker App-Shell-Cache für GitHub Pages (funktioniert in /<repo>/)
-const SW_VERSION = 'mdt-v1.0.0';
-const CORE_ASSETS = [
+// Sehr einfacher SW: Offline-Cache + generierte Icon-Antworten (falls Dateien fehlen)
+const CACHE = 'mdt-v1';
+const ASSETS = [
   './',
   './index.html',
   './styles.css',
   './app.js',
   './manifest.webmanifest',
-  './icons/icon-192.png',
+  './offline.html',
+  './icons/icon-192.png', // werden ggf. von SW generiert
   './icons/icon-512.png'
 ];
 
-// Hilfsfunktion: absoluter URL basierend auf SW-Scope
-const toAbs = (path) => new URL(path, self.registration.scope).toString();
+// Minimaler 1x1 PNG (transparent) als Base64, falls Icons fehlen
+const PNG_1x1_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==';
 
-self.addEventListener('install', (event) => {
-  self.skipWaiting();
-  event.waitUntil(
-    caches.open(SW_VERSION).then((cache) => cache.addAll(CORE_ASSETS.map(toAbs)))
-  );
+self.addEventListener('install', (evt) => {
+  evt.waitUntil((async () => {
+    const c = await caches.open(CACHE);
+    await c.addAll(ASSETS).catch(()=>{});
+    self.skipWaiting();
+  })());
 });
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    (async () => {
-      const keys = await caches.keys();
-      await Promise.all(keys.filter(k => k !== SW_VERSION).map(k => caches.delete(k)));
-      await self.clients.claim();
-    })()
-  );
+self.addEventListener('activate', (evt) => {
+  evt.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)));
+    self.clients.claim();
+  })());
 });
 
-// Cache-first für GET; Navigationen fallen auf index.html zurück (SPA)
-self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
+self.addEventListener('fetch', (evt) => {
+  const url = new URL(evt.request.url);
 
-  const req = event.request;
-
-  // Navigations-Requests → index.html
-  if (req.mode === 'navigate') {
-    event.respondWith(
-      (async () => {
-        try {
-          const fresh = await fetch(req);
-          return fresh;
-        } catch {
-          const cache = await caches.open(SW_VERSION);
-          const fallback = await cache.match(toAbs('./index.html'));
-          return fallback || Response.error();
-        }
-      })()
-    );
+  // On-the-fly Icons bereitstellen, falls die Dateien fehlen
+  if (url.pathname.endsWith('/icons/icon-192.png') || url.pathname.endsWith('/icons/icon-512.png')) {
+    evt.respondWith((async () => {
+      // Versuche aus Cache/Netz; wenn 404, liefere 1x1 PNG
+      try {
+        const cached = await caches.match(evt.request);
+        if (cached) return cached;
+        const net = await fetch(evt.request);
+        if (net && net.ok) return net;
+      } catch {}
+      const bytes = Uint8Array.from(atob(PNG_1x1_BASE64), c => c.charCodeAt(0));
+      return new Response(bytes, { headers: { 'Content-Type': 'image/png', 'Cache-Control':'public, max-age=31536000' } });
+    })());
     return;
   }
 
-  // Sonst: Cache-first
-  event.respondWith(
-    (async () => {
-      const cache = await caches.open(SW_VERSION);
-      const cached = await cache.match(req, { ignoreVary: true, ignoreSearch: true });
-      if (cached) return cached;
-
+  // Navigationsanfragen: Netzwerk zuerst, Offline-Fallback
+  if (evt.request.mode === 'navigate') {
+    evt.respondWith((async () => {
       try {
-        const res = await fetch(req);
-        // Nur erfolgreiche, einfache Antworten cachen
-        if (res.ok && (res.type === 'basic' || res.type === 'cors')) {
-          cache.put(req, res.clone());
-        }
-        return res;
+        const net = await fetch(evt.request);
+        const cache = await caches.open(CACHE);
+        cache.put(evt.request, net.clone()).catch(()=>{});
+        return net;
       } catch {
-        // Fallback: nichts
-        return Response.error();
+        const cached = await caches.match(evt.request);
+        return cached || caches.match('./offline.html');
       }
-    })()
-  );
+    })());
+    return;
+  }
+
+  // Sonst: Cache zuerst, dann Netzwerk
+  evt.respondWith((async () => {
+    const cached = await caches.match(evt.request);
+    if (cached) return cached;
+    try{
+      const net = await fetch(evt.request);
+      const cache = await caches.open(CACHE);
+      cache.put(evt.request, net.clone()).catch(()=>{});
+      return net;
+    } catch {
+      return new Response('', { status: 504 });
+    }
+  })());
 });
