@@ -1,183 +1,184 @@
-// /app.js
-// Basierend auf deiner bisherigen HTML-Datei, in eine externe JS-Datei verschoben,
-// damit der Service Worker sauber cachen kann. (Originallogik uebernommen)  
+// app.js
+/* Einfacher Monopoly Deal Timer mit Sprachansage (letzte 10s) und Gong via WebAudio. */
+(() => {
+  const secondsInput = document.getElementById('secondsInput');
+  const display = document.getElementById('display');
+  const startButton = document.getElementById('startButton');
+  const installBtn = document.getElementById('installBtn');
 
-// ===================== Zustand =====================
-let running = false;          // laeuft der Timer?
-let paused = false;           // ist der Timer pausiert?
-let rafId = null;             // requestAnimationFrame ID
-let endTime = 0;              // Zielzeitpunkt in ms
-let lastWhole = null;         // Letzter gesprochener ganzzahliger Wert
-let warmedUpTTS = false;      // TTS vorgewarmt?
-let deVoice = null;           // ausgewaehlte deutsche Stimme
+  let running = false;
+  let targetMs = 0;
+  let tickHandle = null;
+  let lastWholeSec = null;
+  let spokenSet = new Set();
+  let beforeInstallPromptEvent = null;
 
-const timerEl = document.getElementById('timer');   // Anzeige: Sekunden
-const statusEl = document.getElementById('status'); // Anzeige: Status
-
-// Aktuell gewaehlte Sekunden auslesen
-function getSelectedSeconds(){
-  const active = document.querySelector('.opt[aria-checked="true"]');
-  return Number(active?.dataset.seconds || 45);
-}
-
-// Deutsche Stimme waehlen
-function pickGermanVoice(){
-  const voices = speechSynthesis.getVoices();
-  deVoice = voices.find(v => /de(-|_)?(CH|DE|AT)/i.test(v.lang)) || voices.find(v=>/de/i.test(v.lang)) || null;
-}
-
-// TTS vorwaermen (Workaround gegen Verzoegerung)
-function warmupTTS(){
-  if (warmedUpTTS) return;
-  pickGermanVoice();
-  const u = new SpeechSynthesisUtterance('.');
-  u.volume = 0;
-  if (deVoice) u.voice = deVoice;
-  speechSynthesis.speak(u);
-  warmedUpTTS = true;
-}
-
-// Zahl ansagen
-function speakNow(text){
-  try { speechSynthesis.cancel(); } catch(e){}
-  const u = new SpeechSynthesisUtterance(String(text));
-  if (deVoice) u.voice = deVoice;
-  u.lang = (deVoice?.lang) || 'de-DE';
-  u.rate = 1.0;
-  u.pitch = 1.0;
-  u.volume = 1.0;
-  speechSynthesis.speak(u);
-}
-
-// Kleiner Dreiklang-Gong als Abschluss
-let audioCtx;
-function playTriGong(){
-  return new Promise(resolve => {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const hit = (frequency, delayMs) => {
-      const t0 = audioCtx.currentTime + (delayMs/1000);
-      const osc = audioCtx.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(frequency, t0);
-      const gain = audioCtx.createGain();
-      gain.gain.setValueAtTime(0.0001, t0);
-      gain.gain.exponentialRampToValueAtTime(0.6, t0 + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.2);
-
-      const osc2 = audioCtx.createOscillator();
-      osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(frequency*2.01, t0);
-      const gain2 = audioCtx.createGain();
-      gain2.gain.setValueAtTime(0.0001, t0);
-      gain2.gain.exponentialRampToValueAtTime(0.15, t0 + 0.02);
-      gain2.gain.exponentialRampToValueAtTime(0.0001, t0 + 1.0);
-
-      osc.connect(gain).connect(audioCtx.destination);
-      osc2.connect(gain2).connect(audioCtx.destination);
-      osc.start(t0); osc.stop(t0 + 1.3);
-      osc2.start(t0); osc2.stop(t0 + 1.1);
-    };
-    hit(660,   0);
-    hit(784, 250);
-    hit(988, 500);
-    setTimeout(resolve, 1600);
-  });
-}
-
-// Countdown starten
-function startCountdown(sec){
-  warmupTTS();                        // TTS frueh starten, damit synchron
-  running = true; paused = false; lastWhole = null;
-  endTime = performance.now() + sec * 1000;
-  statusEl.textContent = 'Laeuft';
-  timerEl.textContent = sec;
-
-  const loop = () => {
-    if (!running || paused) return;
-    const now = performance.now();
-    const remainingMs = Math.max(0, endTime - now);
-    const remainingWhole = Math.ceil(remainingMs / 1000);
-
-    // Jede Sekunde aktualisieren & ansagen (10..1)
-    if (remainingWhole !== lastWhole){
-      timerEl.textContent = remainingWhole;             // Anzeige sekundenaktuell
-      if (remainingWhole <= 10 && remainingWhole > 0){
-        speakNow(remainingWhole);                       // synchron zur Anzeige
-      }
-      lastWhole = remainingWhole;
-    }
-
-    // Ende erreicht -> Gong und naechster Durchlauf mit gleicher Dauer
-    if (remainingMs <= 0){
-      running = false;
-      timerEl.textContent = '0';
-      statusEl.textContent = 'Gong…';
-      playTriGong().then(() => {
-        if (!paused){
-          startCountdown(getSelectedSeconds());         // gleiche Auswahl erneut
-        }
-      });
-      return;
-    }
-    rafId = requestAnimationFrame(loop);
-  };
-  cancelAnimationFrame(rafId);
-  rafId = requestAnimationFrame(loop);
-}
-
-// Auswahl-Buttons (30/45/60)
-for (const btn of document.querySelectorAll('.opt')){
-  btn.addEventListener('click', () => {
-    for (const b of document.querySelectorAll('.opt')) b.setAttribute('aria-checked','false');
-    btn.setAttribute('aria-checked','true');
-    if (!running){
-      timerEl.textContent = Number(btn.dataset.seconds);
-      statusEl.textContent = 'Bereit';
-    }
-  });
-}
-
-// Start/Pause/Reset/Stop
-document.getElementById('startBtn').addEventListener('click', () => {
-  startCountdown(getSelectedSeconds());
-});
-
-document.getElementById('pauseBtn').addEventListener('click', () => {
-  if (!running && !paused) return;
-  if (!paused){
-    paused = true; statusEl.textContent = 'Pausiert';
-    cancelAnimationFrame(rafId);
-    try{ speechSynthesis.cancel(); }catch(e){}
+  // Prefill von letztem Wert
+  const last = parseInt(localStorage.getItem('mdt_seconds') || '45', 10);
+  if (!Number.isNaN(last) && last > 0) {
+    secondsInput.value = String(last);
+    renderTime(last);
   } else {
-    const remain = Math.max(0, Number(timerEl.textContent)||0);
-    startCountdown(remain);
+    renderTime(45);
   }
-});
 
-document.getElementById('resetBtn').addEventListener('click', () => {
-  running = false; paused = false; cancelAnimationFrame(rafId);
-  try{ speechSynthesis.cancel(); }catch(e){}
-  timerEl.textContent = getSelectedSeconds();
-  statusEl.textContent = 'Bereit';
-});
-
-document.getElementById('stopBtn').addEventListener('click', () => {
-  running = false; paused = false; cancelAnimationFrame(rafId);
-  try{ speechSynthesis.cancel(); }catch(e){}
-  statusEl.textContent = 'Gestoppt';
-});
-
-// Stimmenliste kann spaet geladen werden
-if (typeof speechSynthesis !== 'undefined'){
-  speechSynthesis.onvoiceschanged = pickGermanVoice;
-}
-
-// ===================== Service Worker registrieren =====================
-// Registriert den Service Worker, damit die App offline faehig ist.
-// Nutzt relativen Pfad, funktioniert auch in Unterordnern.
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js')
-      .catch(err => console.error('SW Registrierung fehlgeschlagen:', err));
+  secondsInput.addEventListener('change', () => {
+    const s = clampSeconds(parseInt(secondsInput.value, 10));
+    secondsInput.value = String(s);
+    localStorage.setItem('mdt_seconds', String(s));
+    if (!running) renderTime(s);
   });
-}
+
+  startButton.addEventListener('click', () => {
+    if (!running) {
+      // Start
+      const s = clampSeconds(parseInt(secondsInput.value, 10));
+      secondsInput.value = String(s);
+      localStorage.setItem('mdt_seconds', String(s));
+
+      startCountdown(s);
+      startButton.textContent = 'Reset';
+      startButton.setAttribute('aria-pressed', 'true');
+    } else {
+      // Reset
+      stopCountdown();
+      const s = clampSeconds(parseInt(secondsInput.value, 10));
+      renderTime(s);
+      startButton.textContent = 'Start';
+      startButton.removeAttribute('aria-pressed');
+    }
+  });
+
+  // Installations-Flow (A2HS)
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    beforeInstallPromptEvent = e;
+    installBtn.hidden = false;
+  });
+
+  installBtn.addEventListener('click', async () => {
+    if (!beforeInstallPromptEvent) return;
+    installBtn.disabled = true;
+    try {
+      await beforeInstallPromptEvent.prompt();
+      await beforeInstallPromptEvent.userChoice;
+    } catch {}
+    installBtn.hidden = true;
+    beforeInstallPromptEvent = null;
+    installBtn.disabled = false;
+  });
+
+  function clampSeconds(n) {
+    if (Number.isNaN(n)) return 45;
+    return Math.min(3600, Math.max(1, n));
+  }
+
+  function renderTime(totalSeconds) {
+    const mm = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+    const ss = Math.floor(totalSeconds % 60).toString().padStart(2, '0');
+    display.textContent = `${mm}:${ss}`;
+  }
+
+  function startCountdown(seconds) {
+    running = true;
+    spokenSet.clear();
+    lastWholeSec = null;
+    targetMs = Date.now() + seconds * 1000;
+
+    // Ein erster Render
+    renderRemaining();
+
+    // Genauigkeit verbessern: 100ms Ticks + Floor auf ganze Sekunde
+    tickHandle = setInterval(renderRemaining, 100);
+  }
+
+  function stopCountdown() {
+    running = false;
+    if (tickHandle) clearInterval(tickHandle);
+    tickHandle = null;
+    spokenSet.clear();
+    lastWholeSec = null;
+  }
+
+  function renderRemaining() {
+    const now = Date.now();
+    let remain = Math.max(0, Math.ceil((targetMs - now) / 1000)); // ceil damit 9.9s → 10
+    if (remain !== lastWholeSec) {
+      lastWholeSec = remain;
+      renderTime(remain);
+
+      // letzte 10 Sekunden sprechen
+      if (remain > 0 && remain <= 10) {
+        if (!spokenSet.has(remain)) {
+          speakNumber(remain);
+          spokenSet.add(remain);
+        }
+      }
+    }
+
+    if (now >= targetMs) {
+      stopCountdown();
+      renderTime(0);
+      playGong(); // Gong abspielen
+      startButton.textContent = 'Start';
+      startButton.removeAttribute('aria-pressed');
+    }
+  }
+
+  function speakNumber(n) {
+    try {
+      if (!('speechSynthesis' in window)) return;
+      const u = new SpeechSynthesisUtterance(String(n));
+      // Bevorzugte Stimme: de-CH → de-DE → default
+      const pickVoice = () => {
+        const list = window.speechSynthesis.getVoices();
+        let v =
+          list.find(v => /de-CH/i.test(v.lang)) ||
+          list.find(v => /de-DE/i.test(v.lang)) ||
+          list[0];
+        return v || null;
+      };
+
+      const v = pickVoice();
+      if (v) u.voice = v;
+      u.lang = (v && v.lang) || 'de-CH';
+      u.rate = 1.0; // normal
+      u.pitch = 1.0;
+      window.speechSynthesis.cancel(); // alte Ansagen stoppen
+      window.speechSynthesis.speak(u);
+    } catch {}
+  }
+
+  // Einfacher Gong via WebAudio (klingt gut genug & keine Asset-Datei nötig)
+  function playGong() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const now = ctx.currentTime;
+
+      // Grundton + Obertöne
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc1.type = 'sine';
+      osc2.type = 'sine';
+      // Frequenzen leicht verstimmt für "Gong"-Charakter
+      osc1.frequency.setValueAtTime(440, now);
+      osc2.frequency.setValueAtTime(660, now);
+
+      // Lautstärke-Hüllkurve (perkussiv)
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.6, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.8);
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc1.start(now);
+      osc2.start(now);
+      osc1.stop(now + 2.0);
+      osc2.stop(now + 2.0);
+    } catch {}
+  }
+})();
