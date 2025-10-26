@@ -117,3 +117,37 @@ main,
     max-width: 900px;
   }
 }
+
+/* === UI-Update (am Ende von styles.css einfügen) === */
+
+/* START-Button: bleibt vollbreit, wirkt "rund" dank mehr Höhe (Pill-Form) */
+#startButton,
+#start,
+.start-btn,
+button.start {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 0.75rem auto;
+  /* mehr Höhe => rundere Optik */
+  padding: clamp(2.8rem, 6vw, 4.8rem) 1.6rem !important; /* oben/unten | links/rechts */
+  min-height: clamp(6rem, 14vw, 12rem) !important;
+  line-height: 1.1;
+  border: none;
+  border-radius: 9999px !important;  /* volle Abrundung (Pill) */
+  background: #d32f2f;
+  color: #fff;
+  touch-action: manipulation;
+}
+
+/* Sekundenzähler: 3x so gross wie vorher (zuvor: clamp(3.2rem,16vw,7.2rem)) */
+#display,
+#counter,
+#time,
+#timer,
+#countdown,
+.timer-display {
+  font-size: clamp(9.6rem, 48vw, 21.6rem) !important; /* = 3x */
+  font-weight: 800;
+  text-align: center;
+}
