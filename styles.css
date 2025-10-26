@@ -179,3 +179,24 @@ button.start {
   /* optionaler Glow wie im Screenshot */
   box-shadow: 0 14px 24px rgba(211,47,47,0.35);
 }
+
+/* Abstand unterhalb Zeitzähler zum Button halbieren */
+
+/* kompaktere Zahl + weniger Abstand nach unten */
+#display,
+#counter,
+#time,
+#timer,
+#countdown,
+.timer-display {
+  line-height: 0.9 !important;
+  margin-bottom: 0.5em !important; /* halber Abstand */
+}
+
+/* Button: oberen Aussenabstand halbieren (vorher 2rem) */
+#startButton,
+#start,
+.start-btn,
+button.start {
+  margin: 1rem auto 2rem !important; /* top | horiz | bottom */
+}
