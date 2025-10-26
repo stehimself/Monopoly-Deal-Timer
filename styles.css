@@ -54,3 +54,66 @@ body{
   .btn-start{ width:180px; height:180px; font-size:20px }
   .display{ font-size:72px }
 }
+
+/* === Overrides für dein UI (ans Ende von styles.css einfügen) === */
+
+/* 1) "App installieren"-Button zuverlässig ausblenden */
+#installButton,
+#install-btn,
+#install,
+.install,
+[data-install],
+button[aria-label="App installieren"] {
+  display: none !important; /* robust, egal wie das Element heisst */
+}
+
+/* 2) Roter START-Button: fast volle Breite & deutlich grösser */
+#startButton,
+#start,
+.start-btn,
+button.start {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 0.75rem auto;
+  padding: 2.4rem 1.6rem;           /* mehr Fläche */
+  font-size: clamp(2.4rem, 10vw, 4.8rem); /* sehr gross auf Mobile */
+  line-height: 1.1;
+  border: none;
+  border-radius: 9999px;            /* schön rund */
+  background: #d32f2f;              /* sattes Rot */
+  color: #fff;
+  touch-action: manipulation;
+}
+
+/* 3) Sekundenzähler über START doppelt so gross (sehr präsent) */
+#display,
+#counter,
+#time,
+#timer,
+#countdown,
+.timer-display {
+  font-size: clamp(3.2rem, 16vw, 7.2rem); /* ~2x */
+  font-weight: 800;
+  text-align: center;
+}
+
+/* 4) Zentrierter Inhalt & sinnvolle Maxbreite */
+main,
+.container,
+#app {
+  max-width: min(900px, 100%);
+  margin: 0 auto;
+  padding: 0.5rem 1rem;
+  text-align: center;
+}
+
+/* 5) Auf grösseren Screens START-Button nicht überbreit wirken lassen */
+@media (min-width: 768px) {
+  #startButton,
+  #start,
+  .start-btn,
+  button.start {
+    max-width: 900px;
+  }
+}
