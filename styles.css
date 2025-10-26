@@ -190,7 +190,7 @@ button.start {
 #countdown,
 .timer-display {
   line-height: 0.9 !important;
-  margin-bottom: 0.5em !important; /* halber Abstand */
+  margin-bottom: 0 !important; /* halber Abstand */
 }
 
 /* Button: oberen Aussenabstand halbieren (vorher 2rem) */
@@ -198,5 +198,5 @@ button.start {
 #start,
 .start-btn,
 button.start {
-  margin: 1rem auto 2rem !important; /* top | horiz | bottom */
+  margin: 0 auto 2rem !important; /* top | horiz | bottom */
 }
