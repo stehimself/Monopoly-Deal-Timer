@@ -151,3 +151,31 @@ button.start {
   font-weight: 800;
   text-align: center;
 }
+
+/* === Kreis-START-Button (ans Ende von styles.css) === */
+
+/* Macht den Button wirklich rund: Breite = Höhe (Kreis) */
+#startButton,
+#start,
+.start-btn,
+button.start {
+  display: grid !important;          /* Inhalt zentrieren */
+  place-items: center !important;
+  width: min(92vw, 900px) !important;/* volle Breite (wie jetzt) */
+  aspect-ratio: 1 / 1 !important;    /* Höhe = Breite → Kreis */
+  height: auto !important;
+  margin: 2rem auto !important;
+
+  padding: 0 !important;             /* kein vertikales Padding */
+  border: none;
+  border-radius: 50% !important;     /* rund */
+  background: #d32f2f;
+  color: #fff;
+  line-height: 1.1;
+
+  /* gut lesbarer Text im Kreis */
+  font-size: clamp(2.2rem, 7vw, 3.6rem) !important;
+
+  /* optionaler Glow wie im Screenshot */
+  box-shadow: 0 14px 24px rgba(211,47,47,0.35);
+}
