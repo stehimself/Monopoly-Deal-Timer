@@ -198,5 +198,5 @@ button.start {
 #start,
 .start-btn,
 button.start {
-  margin: 0 auto 2rem !important; /* top | horiz | bottom */
+  margin: -10px auto 2rem !important; /* top | horiz | bottom */
 }
